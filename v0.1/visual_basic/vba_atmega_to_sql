@@ -1,0 +1,96 @@
+Rem Attribute VBA_ModuleType=VBADocumentModule
+Option VBASupport 1
+
+Enum READYSTATE
+READYSTATE_UNINITIALIZED = 0
+READYSTATE_LOADING = 1
+READYSTATE_LOADED = 2
+READYSTATE_INTERACTIVE = 3
+READYSTATE_COMPLETE = 4
+End Enum
+
+
+Private Declare Sub Sleep Lib "kernel32" (ByVal lngMilliSeconds As Long)
+Private Sub WaitSeconds(intSeconds As Integer)
+  ' Comments: Waits for a specified number of seconds
+  ' Params  : intSeconds      Number of seconds to wait
+  ' Source  : Total Visual SourceBook
+
+  On Error GoTo PROC_ERR
+
+  Dim datTime As Date
+
+  datTime = DateAdd("s", intSeconds, Now)
+
+  Do
+   ' Yield to other programs (better than using DoEvents which eats up all the CPU cycles)
+    Sleep 100
+    DoEvents
+  Loop Until Now >= datTime
+
+PROC_EXIT:
+  Exit Sub
+
+PROC_ERR:
+  MsgBox "Error: " & Err.Number & ". " & Err.Description, , "modDateTime.WaitSeconds"
+  Resume PROC_EXIT
+End Sub
+
+Private Sub CommandButton1_Click()
+starting_row = Cells(1, 2).Value - 1
+Num_loops = Cells(2, 2).Value
+
+Dim data_array()
+Dim my_obj As Object
+ReDim data_array(1 To 7)
+
+Dim sCNX As String, sSQL As String
+Dim cnx As Object, rs As Object
+Set cnx = CreateObject("ADODB.Connection")
+Set rs = CreateObject("ADODB.Recordset")
+
+'sCNX = "Driver={MySQL ODBC 5.3 ANSI Driver}; Server=localhost; Database=energy; uid = root; pwd=;"
+sCNX = "Driver={MySQL ODBC 5.3 ANSI Driver}; Server=localhost;  Database=energy; uid = root; pwd=;"
+
+cnx.Open sCNX
+
+For i = 1 To Num_loops
+    my_url = "http://192.168.2.16/c"
+    my_url = my_url & "?cb=" & Timer() * 100
+        sSQL = "insert into en (P, P1, P2, PF1, PF2, GT, GN) values ("
+
+    Set my_obj = CreateObject("MSXML2.XMLHTTP")
+    my_obj.Open "GET", my_url, False
+    my_obj.send
+    Do While (my_obj.READYSTATE <> READYSTATE_COMPLETE)
+    DoEvents
+    Loop
+
+    stringy = my_obj.responseText
+    Cells(starting_row - 1, 1).Value = i
+
+    For k = 1 To 7
+    t1 = InStr(stringy, ";")
+    t2 = InStr(stringy, ":")
+    Cells(starting_row + i, 1 + k).Value = Right(Left(stringy, t1 - 1), t1 - t2 - 1)
+    Cells(6, 1 + k).Value = Right(Left(stringy, t1 - 1), t1 - t2 - 1)
+    data_array(k) = Cells(6, 1 + k).Value
+    stringy = Right(stringy, Len(stringy) - t1)
+    Next k
+    Cells(starting_row + i, 1).Value = Now()
+    Cells(6, 1).Value = Now()
+    Set my_obj = Nothing
+
+    For j = 1 To 6
+    sSQL = sSQL & data_array(j) & ", "
+    Next j
+    sSQL = sSQL & data_array(7) & ")"
+
+    Set rs = cnx.Execute(sSQL)
+    WaitSeconds (5)
+
+Next i
+cnx.Close: Set cnx = Nothing
+
+
+End Sub
